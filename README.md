@@ -1,2 +1,23 @@
-# TTRevenueOperationsRingostat
-2nd part of Test Task, Revenue Operations Specialist at Ringostat
+# Ringostat RevOps dashboard (тестове завдання)
+
+Streamlit-дашборд по таблиці угод: win rate по країнах і CRM, розподіл по стадіях, угоди по джерелах, залежність win rate від PPC budget, вкладка Data issues.
+
+## Запуск
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+## Файли
+- `app.py` — інтерфейс і графіки
+- `revops_lib.py` — завантаження даних, розрахунок win rate, правила data quality
+- `data/deals.xlsx` — вихідна таблиця (копія шаблону)
+- `INSIGHTS.md` — RevOps Insights Summary
+- `AI_USAGE.md` — використання AI
+
+## Рішення в розрахунках
+- **Win rate = Won / (Won + Lost).** Відкриті угоди (28%) виключені, бо їх результат невідомий.
+- Країни та CRM з малою кількістю закритих угод (за замовчуванням менше 15) групуються або приховуються, а їхні стовпці на графіку сірі. Повзунок у боковій панелі змінює поріг.
+- «Is not using» об'єднано з «No CRM» у графіках, а в Data issues це позначено як окрема перевірка.
+- PPC budget — діапазони, тому графік категоріальний, не точковий.
+- Data issues рахуються по всьому набору даних, фільтри на них не впливають. Номери рядків збігаються з вихідною таблицею.
