@@ -6,10 +6,11 @@ import revops_lib as L
 
 st.set_page_config(page_title="Ringostat RevOps Dashboard", layout="wide")
 
-ACCENT = "#2a6f97"      # one hue for all magnitude bars
-MUTED = "#a9b8c4"       # low-sample bars (n below threshold)
-INK = "#1f2933"
-GRID = "#e4e9ee"
+ACCENT = "#3a86b8"      # one hue for all magnitude bars; readable on light and dark backgrounds
+MUTED = "#8b98a5"       # low-sample / neutral bars
+LOST = "#d9825b"
+GRID = "rgba(128,128,128,0.25)"   # neutral grid, visible on both themes
+# Text colour is intentionally NOT set: Plotly inherits it from the Streamlit theme (light or dark).
 
 
 @st.cache_data
@@ -20,7 +21,7 @@ def get_data() -> pd.DataFrame:
 def style(fig: go.Figure, height: int = 340, pct: bool = False) -> go.Figure:
     fig.update_layout(
         height=height, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
-        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color=INK, size=13),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(size=13),
         bargap=0.35,
     )
     fig.update_xaxes(showgrid=False, linecolor=GRID)
@@ -131,6 +132,33 @@ with tab_dash:
         fig.update_yaxes(showgrid=False)
         st.plotly_chart(fig, width="stretch")
 
+    st.subheader("Trend by AQL month")
+    m = f.assign(month=f["aql_date"].dt.to_period("M"))
+    mg = m.groupby("month").agg(deals=("Stage", "size"), won=("is_won", "sum"), closed=("is_closed", "sum")).reset_index()
+    mg["lost"] = mg["closed"] - mg["won"]
+    mg["open"] = mg["deals"] - mg["closed"]
+    mg["win_rate"] = mg["won"] / mg["closed"].where(mg["closed"] > 0)
+    last = df["aql_date"].max()
+    mg["label"] = [p.strftime("%b %Y") + (" *" if p.end_time.normalize() > last else "") for p in mg["month"]]
+    left, right = st.columns(2)
+    with left:
+        st.caption("Deals by outcome")
+        fig = go.Figure()
+        for name, col, colr in [("Closed Won", "won", ACCENT), ("Closed Lost", "lost", LOST), ("Open", "open", MUTED)]:
+            fig.add_bar(x=mg["label"], y=mg[col], name=name, marker_color=colr, text=[str(v) if v >= 25 else "" for v in mg[col]], textposition="inside", textangle=0,
+                        hovertemplate="%{x}: %{y} " + name + "<extra></extra>")
+        fig.update_layout(barmode="stack")
+        style(fig)
+        fig.update_layout(showlegend=True, legend=dict(orientation="h", y=1.12, x=0))
+        st.plotly_chart(fig, width="stretch")
+    with right:
+        st.caption("Win rate (closed deals only)")
+        wm = mg[mg["closed"] > 0].copy()
+        wm[["won", "closed"]] = wm[["won", "closed"]].astype(int)
+        st.plotly_chart(winrate_bar(wm, "label", min_n), width="stretch")
+    st.caption("\\* Partial month at the edge of the data. Recent months are not comparable with older ones: "
+               "many of their deals are still open (see the Open share in the left chart), so their win rate can still change.")
+
     st.subheader("Win rate vs PPC budget")
     g = L.win_rate(f, "PPC budget USD").set_index("PPC budget USD").reindex(L.PPC_ORDER).dropna().reset_index()
     g[["won", "closed"]] = g[["won", "closed"]].astype(int)
@@ -143,6 +171,9 @@ with tab_dash:
 with tab_issues:
     summary, rows = L.data_issues(df)
     st.markdown("Checks run on the **full dataset** (filters do not apply). Row numbers match the source sheet.")
+    st.caption("Severity: **High** - the record contradicts its own Stage, so win rate, stage counts or cycle time are distorted. "
+               "**Medium** - breaks a field rule or may inflate the deal count (cannot be confirmed without a deal ID). "
+               "**Low** - suspicious but possibly legitimate value, or a labelling inconsistency; no effect on core metrics.")
     st.dataframe(summary, hide_index=True, width="stretch", height=(len(summary) + 1) * 35 + 3)
     st.subheader("Data issues: affected rows")
     sev = st.multiselect("Severity", ["High", "Medium", "Low"], default=["High", "Medium", "Low"])

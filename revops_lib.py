@@ -36,6 +36,12 @@ def data_issues(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (rule summary, row-level issues). Rules run on the full dataset."""
     is_open = ~df["is_closed"]
     period = df["Subscription period"]
+    key = ["AQL date", "Source", "Client CRM", "Client country", "Number of sales reps", "Subscription period",
+           "PPC budget USD", "Stage", "Loss reason description", "Closing Date"]
+    # Severity logic:
+    #   High   - the record contradicts its own Stage, so win rate, stage counts or cycle time are distorted.
+    #   Medium - breaks a field rule, or may inflate the number of deals (cannot be confirmed without a deal ID).
+    #   Low    - suspicious but possibly legitimate value, or a labelling inconsistency; no effect on core metrics.
     rules = [
         ("High", "Closed Won/Lost, but Closing Date is empty", df["is_closed"] & df["close_date"].isna()),
         ("High", "Open stage, but Closing Date is filled", is_open & df["close_date"].notna()),
@@ -43,14 +49,12 @@ def data_issues(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         ("High", "Closed Lost without Loss reason", df["Stage"].eq("Closed Lost") & df["Loss reason description"].isna()),
         ("High", "Loss reason on a deal that is not Closed Lost", ~df["Stage"].eq("Closed Lost") & df["Loss reason description"].notna()),
         ("High", "Closed Won without Subscription period", df["is_won"] & period.isna()),
-        ("Medium", "Subscription period on a deal that is not Closed Won", ~df["is_won"] & period.notna()),
+        ("High", "Subscription period on a deal that is not Closed Won", ~df["is_won"] & period.notna()),
         ("Medium", "Subscription period not in 30/90/180/360", period.notna() & ~period.isin(VALID_PERIODS)),
-        ("Medium", "Number of sales reps = 0", df["Number of sales reps"].eq(0)),
+        ("Medium", "Possible duplicate: all fields identical (no deal ID, so may be different clients)",
+         df.duplicated(subset=key, keep=False)),
+        ("Low", "Number of sales reps = 0 (suspicious, cannot verify)", df["Number of sales reps"].eq(0)),
         ("Low", "Number of sales reps >= 100 (possible outlier or typo)", df["Number of sales reps"] >= 100),
-        ("Medium", "Source = Facebook PPC, but PPC budget = 0", df["Source"].eq("Facebook PPC") & df["PPC budget USD"].eq("0")),
-        ("Low", "Duplicate row (all columns identical)", df.duplicated(subset=[c for c in df.columns if c in
-            ["AQL date", "Source", "Client CRM", "Client country", "Number of sales reps", "Subscription period",
-             "PPC budget USD", "Stage", "Loss reason description", "Closing Date"]], keep="first")),
         ("Low", "Client CRM 'Is not using' (duplicates meaning of 'No CRM')", df["Client CRM"].eq("Is not using")),
     ]
     summary, rows = [], []
