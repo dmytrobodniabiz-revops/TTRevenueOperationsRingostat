@@ -91,10 +91,11 @@ with tab_dash:
     with left:
         st.subheader("Win rate by country")
         g = L.win_rate(f, "country_code")
-        big = g[g["closed"] >= min_n]
-        small = g[g["closed"] < min_n]
+        # Explicitly selected countries are always shown by name (grey if the sample is small).
+        big = g if sel_countries else g[g["closed"] >= min_n]
+        small = g.iloc[0:0] if sel_countries else g[g["closed"] < min_n]
         if len(small):
-            other = pd.DataFrame([{"country_code": f"Other ({len(small)} countries)", "won": small["won"].sum(),
+            other = pd.DataFrame([{"country_code": f"Other ({len(small)} {'country' if len(small) == 1 else 'countries'})", "won": small["won"].sum(),
                                    "closed": small["closed"].sum()}])
             other["win_rate"] = other["won"] / other["closed"]
             big = pd.concat([big, other], ignore_index=True)
@@ -105,10 +106,12 @@ with tab_dash:
     with right:
         st.subheader("Win rate by CRM")
         g = L.win_rate(f, "crm")
-        big = g[g["closed"] >= min_n].sort_values("win_rate", ascending=False)
-        small = g[g["closed"] < min_n]
+        big = (g if sel_crms else g[g["closed"] >= min_n]).sort_values("win_rate", ascending=False)
+        small = g.iloc[0:0] if sel_crms else g[g["closed"] < min_n]
         if len(big):
             st.plotly_chart(winrate_bar(big, "crm", min_n, horizontal=True), width="stretch")
+        else:
+            st.info("No CRM in the current filter has enough closed deals. Select CRMs explicitly to see them.")
         st.caption(f"{len(small)} CRMs with fewer than {min_n} closed deals are hidden (total {int(small['closed'].sum())} deals).")
 
     left, right = st.columns(2)
