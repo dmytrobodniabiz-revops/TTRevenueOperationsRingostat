@@ -73,6 +73,7 @@ if isinstance(date_range, tuple) and len(date_range) == 2:
     f = f[(f["aql_date"].dt.date >= date_range[0]) & (f["aql_date"].dt.date <= date_range[1])]
 
 st.title("Ringostat: RevOps dashboard")
+st.caption(f"Analysis as of {df['aql_date'].max():%d %b %Y} (latest AQL date in the data). The export date is unknown, so open deals are treated as open at that date.")
 tab_dash, tab_issues = st.tabs(["Dashboard", "Data issues"])
 
 with tab_dash:
